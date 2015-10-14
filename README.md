@@ -17,7 +17,7 @@ Aerospike output plugins for Embulk loads records to databases using AerospikeJa
 - **command**: aerospike command(now supported put and delete only) (string, required)
 - **namespace**: destination namespace (string, required)
 - **set_name**: destination set name (string, required)
-- **key_name**: corresponding column name for create destination key (hash, default: `key`)
+- **key_name**: corresponding column name for create destination key. specified column will be excluded from destinations. (hash, default: `key`)
 - **client_policy**: (hash, default: `conform to aerospike`)
   - **user**: user name (string, default: `null`)
   - **password**: user password (string, default: `null`)
@@ -68,7 +68,7 @@ out:
   command: put
   namespace: test
   set_name: set
-  key_index: 1
+  key_name: column0
   client_policy:
     max_retries: 3
   write_policy:
