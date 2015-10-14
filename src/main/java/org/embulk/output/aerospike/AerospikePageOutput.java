@@ -6,6 +6,7 @@ import com.aerospike.client.async.AsyncClientPolicy;
 import com.aerospike.client.listener.DeleteListener;
 import com.aerospike.client.listener.WriteListener;
 import com.aerospike.client.policy.WritePolicy;
+import com.google.common.base.Optional;
 import org.embulk.config.TaskReport;
 import org.embulk.config.TaskSource;
 import org.embulk.spi.*;
@@ -23,6 +24,10 @@ import java.util.stream.StreamSupport;
 public class AerospikePageOutput implements TransactionalPageOutput {
 
     private final Logger log = Exec.getLogger(AerospikePageOutput.class);
+    private final AerospikeOutputPlugin.PluginTask task;
+    private final AtomicLong counter = new AtomicLong();
+    private final AsyncClient aerospike;
+    private final PageReader reader;
 
     public AerospikePageOutput(TaskSource taskSource, final Schema schema, int taskIndex) {
         reader = new PageReader(schema);
@@ -57,14 +62,6 @@ public class AerospikePageOutput implements TransactionalPageOutput {
         aerospike = new AsyncClient(policy, hosts.toArray(new Host[hosts.size()]));
     }
 
-    private final AerospikeOutputPlugin.PluginTask task;
-
-    private final AtomicLong counter = new AtomicLong();
-
-    private final AsyncClient aerospike;
-
-    private final PageReader reader;
-
     @Override
     public void add(Page page) {
 
@@ -83,53 +80,81 @@ public class AerospikePageOutput implements TransactionalPageOutput {
                 Object keyObj = "";
 
                 for (Column column : sc.getColumns()) {
-
-                    int index = column.getIndex();
                     String name = column.getName();
-
-                    int keyIndex = task.getKeyIndex().get();
-
+                    String keyName = task.getKeyName().get();
                     Type type = column.getType();
                     switch (type.getName()) {
-                        case "string":
-                            if (!reader.isNull(column)) {
-                                String value = reader.getString(column);
-                                if (index == keyIndex) keyObj = value;
-                                bins.put(name, value);
+                        case "string": {
+                            if (reader.isNull(column)) break;
+                            final String value = reader.getString(column);
+                            if (name.equals(keyName)) {
+                                keyObj = value;
+                                break;
                             }
+                            final Optional<Object> v = task.getSplitters().transform(stMap -> {
+                                if (stMap.containsKey(name)) {
+
+                                    List<String> values = Arrays.asList(value.split(stMap.get(name).getSeparator()));
+                                    switch (stMap.get(name).getElementType()) {
+                                        case "long":
+                                            return values.stream().map(s -> s.isEmpty() ? "0" : s).map(Long::valueOf).collect(Collectors.toList());
+                                        case "double":
+                                            return values.stream().map(s -> s.isEmpty() ? "0.0" : s).map(Double::valueOf).collect(Collectors.toList());
+                                        case "string":
+                                        default:
+                                            return values;
+                                    }
+                                } else {
+                                    return value;
+                                }
+                            });
+                            bins.put(name, v.or(value));
                             break;
-                        case "long":
-                            if (!reader.isNull(column)) {
-                                Long value = reader.getLong(column);
-                                if (index == keyIndex) keyObj = value;
-                                bins.put(name, value);
+                        }
+                        case "long": {
+                            if (reader.isNull(column)) break;
+                            Long value = reader.getLong(column);
+                            if (name.equals(keyName)) {
+                                keyObj = value;
+                                break;
                             }
+                            bins.put(name, value);
                             break;
-                        case "double":
-                            if (!reader.isNull(column)) {
-                                Double value = reader.getDouble(column);
-                                if (index == keyIndex) keyObj = value;
-                                bins.put(name, value);
+                        }
+                        case "double": {
+                            if (reader.isNull(column)) break;
+                            Double value = reader.getDouble(column);
+                            if (name.equals(keyName)) {
+                                keyObj = value;
+                                break;
                             }
+                            bins.put(name, value);
                             break;
-                        case "boolean":
-                            if (!reader.isNull(column)) {
-                                Boolean value = reader.getBoolean(column);
-                                if (index == keyIndex) keyObj = value;
-                                bins.put(name, value);
+                        }
+                        case "boolean": {
+                            if (reader.isNull(column)) break;
+                            Boolean value = reader.getBoolean(column);
+                            if (name.equals(keyName)) {
+                                keyObj = value;
+                                break;
                             }
+                            bins.put(name, value);
                             break;
-                        case "timestamp":
-                            if (!reader.isNull(column)) {
-                                Long value = reader.getTimestamp(column).toEpochMilli();
-                                if (index == keyIndex) keyObj = value;
-                                bins.put(name, value);
+                        }
+                        case "timestamp": {
+                            if (reader.isNull(column)) break;
+                            Long value = reader.getTimestamp(column).toEpochMilli();
+                            if (name.equals(keyName)) {
+                                keyObj = value;
+                                break;
                             }
+                            bins.put(name, value);
+                            break;
+                        }
                         default:
                             break;
                     }
                 }
-
 
                 if (log.isDebugEnabled()) log.debug(keyObj.toString());
                 Key key = new Key(task.getNamespace(), task.getSetName(), Value.get(keyObj));
