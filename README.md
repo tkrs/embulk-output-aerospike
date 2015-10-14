@@ -1,5 +1,7 @@
 # Aerospike output plugin for Embulk
 
+[![Gem Version](https://badge.fury.io/rb/embulk-output-aerospike.svg)](https://badge.fury.io/rb/embulk-output-aerospike)
+
 Aerospike output plugins for Embulk loads records to databases using AerospikeJavaClient.
 
 ## Overview
