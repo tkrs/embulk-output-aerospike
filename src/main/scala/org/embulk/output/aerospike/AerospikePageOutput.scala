@@ -86,7 +86,6 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
   implicit val encoder = Encoder.instance[Any](toJson)
 
   def add(page: Page) {
-    log.info("add")
     reader.setPage(page)
     while (reader.nextRecord()) {
       val record: MMap[String, Any] = MMap.empty
@@ -174,7 +173,7 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
     executor.close
   }
 
-  def abort(): Unit = log.warn("abort")
+  def abort(): Unit = log.error(s"abort ${tsk.getCommand} ok[${successCount.longValue}] ng[${failCount.longValue()}]")
 
   def commit: TaskReport = Exec.newTaskReport
 }
