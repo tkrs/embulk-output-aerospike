@@ -77,7 +77,7 @@ object AerospikeOutputPlugin {
 
   trait WritePolicyTask extends Task {
     @Config("generation")
-    @ConfigDefault("null") def getGeneration: Optional[Integer]
+    @ConfigDefault("0") def getGeneration: Optional[Integer]
 
     @Config("expiration")
     @ConfigDefault("0") def getExpiration: Optional[Integer]
