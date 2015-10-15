@@ -2,7 +2,9 @@
 
 [![Gem Version](https://badge.fury.io/rb/embulk-output-aerospike.svg)](https://badge.fury.io/rb/embulk-output-aerospike)
 
-Aerospike output plugins for Embulk loads records to databases using AerospikeJavaClient.
+Aerospike output plugins for Embulk loads records to databases using [aerospiker](https://github.com/tkrs/aerospiker).
+
+And it was implemented in Scala :laughing:
 
 ## Overview
 
