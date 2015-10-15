@@ -36,8 +36,6 @@ object AerospikeOutputPlugin {
     @Config("splitters")
     @ConfigDefault("null") def getSplitters: Optional[JMap[String, AerospikeOutputPlugin.SplitterTask]]
 
-    @Config("parallel")
-    @ConfigDefault("false") def getParallel: Boolean
   }
 
   trait SplitterTask extends Task {

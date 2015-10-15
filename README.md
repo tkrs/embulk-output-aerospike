@@ -38,7 +38,6 @@ Aerospike output plugins for Embulk loads records to databases using AerospikeJa
 - **splitters**: key is column_name (hash, required)
   - **separator**: regexp for splitting separator (string, default: `,`)
   - **element_type**: to type of conversions for each elements. now supported type is string, long and double (string, default: `string`)
-- **parallel**: use parallel execute (boolean, default: `false`)
 
 ## Example
 
@@ -53,7 +52,6 @@ out:
   namespace: test
   set_name: set
   single_bin_name: record
-  parallel: true
   splitters:
     column1: {separator: '\.*', element_type: string}
     column2: {separator: '\t', element_type: long}
@@ -77,7 +75,6 @@ out:
     generation: 0
     expiration: 64000
     send_key: true
-  parallel: true
 ```
 
 
