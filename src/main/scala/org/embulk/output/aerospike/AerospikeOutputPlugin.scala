@@ -4,10 +4,7 @@ import java.util.{ List => JList, Map => JMap }
 
 import com.google.common.base.Optional
 import org.embulk.config._
-import org.embulk.spi.Exec
-import org.embulk.spi.OutputPlugin
-import org.embulk.spi.Schema
-import org.embulk.spi.TransactionalPageOutput
+import org.embulk.spi._
 
 object AerospikeOutputPlugin {
 

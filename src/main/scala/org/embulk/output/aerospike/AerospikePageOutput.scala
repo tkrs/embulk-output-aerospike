@@ -1,5 +1,7 @@
 package org.embulk.output.aerospike
 
+import java.util.concurrent.atomic.AtomicLong
+
 import aerospiker._
 import aerospiker.policy.{ ClientPolicy, WritePolicy }
 import aerospiker.task.Aerospike
@@ -7,29 +9,21 @@ import cats.data.Xor, Xor._
 import io.circe._, io.circe.syntax._
 import org.embulk.config.TaskReport
 import org.embulk.config.TaskSource
-import org.embulk.spi.Exec
-import org.embulk.spi.PageReader
-import org.embulk.spi.Schema
-import org.embulk.spi.TransactionalPageOutput
 import org.embulk.spi._
-import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ Map => MMap }
 import scala.collection.JavaConversions._
 
-import org.slf4j.Logger
-
-import scalaz.{\/-, -\/}
+import scalaz.{ \/-, -\/ }
 
 class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int) extends TransactionalPageOutput {
 
   import AerospikeOutputPlugin._
 
-  private[this] val log: Logger = Exec.getLogger(classOf[AerospikePageOutput])
-  private[this] val tsk: AerospikeOutputPlugin.PluginTask = taskSource.loadTask(classOf[AerospikeOutputPlugin.PluginTask])
-  private[this] val successCount: AtomicLong = new AtomicLong
-  private[this] val failCount: AtomicLong = new AtomicLong
-
+  private[this] val log = Exec.getLogger(classOf[AerospikePageOutput])
+  private[this] val tsk = taskSource.loadTask(classOf[AerospikeOutputPlugin.PluginTask])
+  private[this] val successCount = new AtomicLong
+  private[this] val failCount = new AtomicLong
 
   private[this] val wp: WritePolicy = {
     if (tsk.getWritePolicy.isPresent) {
@@ -88,46 +82,46 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
   def add(page: Page) {
     reader.setPage(page)
     while (reader.nextRecord()) {
-      val record: MMap[String, Any] = MMap.empty
       val schema = reader.getSchema
+      val record: MMap[String, Any] = MMap.empty
       schema.getColumns.foreach { col =>
         val name = col.getName
-        col.getType.getName match {
-          case "long" => if (!(reader isNull col))
-            record += name -> reader.getLong(col)
-          case "double" => if (!(reader isNull col))
-            record += name -> reader.getDouble(col)
-          case "timestamp" => if (!(reader isNull col))
-            record += name -> reader.getTimestamp(col).toEpochMilli
-          case "boolean" => if (!(reader isNull col))
-            record += name -> reader.getBoolean(col)
-          case "string" => if (!(reader isNull col)) {
-            val cv = reader.getString(col)
-            if (tsk.getSplitters.isPresent) {
-              val sps = tsk.getSplitters.get.toMap
-              sps.get(name) match {
-                case None => //
-                  record += name -> cv
-                case Some(v) =>
-                  val sep = v.getSeparator
-                  v.getElementType match {
-                    case "long" =>
-                      val x = cv.split(sep).map(s => if (s.isEmpty) "0" else s).map(_.toLong)
-                      record += name -> x
-                    case "double" =>
-                      val x = cv.split(sep).map(s => if (s.isEmpty) "0" else s).map(_.toDouble)
-                      record += name -> x
-                    case "string" =>
-                      val x = cv.split(sep)
-                      record += name -> x
-                  }
+        if (!(reader isNull col)) {
+          col.getType.getName match {
+            case "long" =>
+              record += name -> reader.getLong(col)
+            case "double" =>
+              record += name -> reader.getDouble(col)
+            case "timestamp" =>
+              record += name -> reader.getTimestamp(col).toEpochMilli
+            case "boolean" =>
+              record += name -> reader.getBoolean(col)
+            case "string" =>
+              val cv = reader.getString(col)
+              if (tsk.getSplitters.isPresent) {
+                val sps = tsk.getSplitters.get.toMap
+                sps.get(name) match {
+                  case None => //
+                    record += name -> cv
+                  case Some(v) =>
+                    val sep = v.getSeparator
+                    v.getElementType match {
+                      case "long" =>
+                        val x = cv.split(sep).map(s => if (s.isEmpty) "0" else s).map(_.toLong)
+                        record += name -> x
+                      case "double" =>
+                        val x = cv.split(sep).map(s => if (s.isEmpty) "0" else s).map(_.toDouble)
+                        record += name -> x
+                      case "string" =>
+                        val x = cv.split(sep)
+                        record += name -> x
+                    }
+                }
+              } else {
+                record += name -> cv
               }
-            } else {
-              record += name -> cv
-            }
+            case typ => log.error(typ + "[?]")
           }
-          case typ => log.error(typ + "[?]")
-        }
       }
       val keyObj = record.getOrElse(tsk.getKeyName.get, "")
       record -= tsk.getKeyName.get
