@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import aerospiker._
 import aerospiker.policy.{ ClientPolicy, WritePolicy }
-import aerospiker.task.Aerospike
+import aerospiker.task.{ DeleteError, PutError, Aerospike }
 import cats.data.Xor, Xor._
 import io.circe._, io.circe.syntax._
 import org.embulk.config.TaskReport
@@ -13,6 +13,7 @@ import org.embulk.spi._
 import org.embulk.spi.`type`.Type
 import org.embulk.spi.time.Timestamp
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.{ Map => MMap, ListBuffer }
 import scala.collection.JavaConversions._
 import scalaz.concurrent.Task
@@ -28,6 +29,7 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
   private[this] val tsk = taskSource.loadTask(classOf[AerospikeOutputPlugin.PluginTask])
   private[this] val successCount = new AtomicLong
   private[this] val failCount = new AtomicLong
+  private[this] val failures = TrieMap.empty[String, String]
 
   private[this] val wp: WritePolicy = {
     if (tsk.getWritePolicy.isPresent) {
@@ -146,8 +148,13 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
     Task.delay {
       for ( r <- t ) {
         r match {
+          case Left(e @ PutError(key, cause)) =>
+            log.error(e.toString, e)
+            failures += key -> cause.getMessage
+            failCount.addAndGet(1L)
           case Left(e) =>
             log.error(e.toString, e)
+            failures += e.getMessage -> e.getMessage
             failCount.addAndGet(1L)
           case Right(_) =>
             successCount.addAndGet(1L)
@@ -167,8 +174,9 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
     Task.delay {
       for ( r <- t ) {
         r match {
-          case Left(e) =>
-            log.error(e.key, e)
+          case Left(DeleteError(key, cause)) =>
+            log.error(key, cause)
+            failures += key -> cause.getMessage
             failCount.addAndGet(1L)
           case Right(_) =>
             successCount.addAndGet(1L)
@@ -195,7 +203,12 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
 
   def abort(): Unit = log.error(s"abort ${tsk.getCommand} ok[${successCount.longValue}] ng[${failCount.longValue()}]")
 
-  def commit: TaskReport = Exec.newTaskReport
+  def commit: TaskReport = {
+    var r = Exec.newTaskReport
+    r.set("rans", successCount.longValue() + failCount.longValue())
+    r.set("failures", failures.toMap.asJson.pretty(Printer.noSpaces))
+    r
+  }
 }
 
 object ops {

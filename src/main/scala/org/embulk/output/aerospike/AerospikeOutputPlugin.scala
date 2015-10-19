@@ -98,8 +98,7 @@ class AerospikeOutputPlugin extends OutputPlugin {
 
   def transaction(config: ConfigSource, schema: Schema, taskCount: Int, control: Control): ConfigDiff = {
     val task = config.loadConfig(classOf[PluginTask])
-    control.run(task.dump)
-    Exec.newConfigDiff
+    control.run(task.dump).foldRight(Exec.newConfigDiff) { (l, r) => r.merge(l) }
   }
 
   def resume(taskSource: TaskSource, schema: Schema, taskCount: Int, control: Control): ConfigDiff =
