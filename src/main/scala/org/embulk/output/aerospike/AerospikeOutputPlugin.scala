@@ -94,6 +94,7 @@ object AerospikeOutputPlugin {
 class AerospikeOutputPlugin extends OutputPlugin {
   import OutputPlugin._
   import AerospikeOutputPlugin._
+  import scala.collection.JavaConversions._
 
   def transaction(config: ConfigSource, schema: Schema, taskCount: Int, control: Control): ConfigDiff = {
     val task = config.loadConfig(classOf[PluginTask])
@@ -101,7 +102,7 @@ class AerospikeOutputPlugin extends OutputPlugin {
     Exec.newConfigDiff
   }
 
-  def resume(taskSource: TaskSource, schema: Schema, taskCount: Int, control: OutputPlugin.Control): ConfigDiff =
+  def resume(taskSource: TaskSource, schema: Schema, taskCount: Int, control: Control): ConfigDiff =
     throw new UnsupportedOperationException("aerospike output plugin does not support resuming")
 
   def open(taskSource: TaskSource, schema: Schema, taskIndex: Int): TransactionalPageOutput =
