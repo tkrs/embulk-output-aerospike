@@ -1,5 +1,6 @@
 package org.embulk.output.aerospike
 
+import java.util.concurrent.{ CountDownLatch, ConcurrentLinkedQueue }
 import java.util.concurrent.atomic.AtomicLong
 
 import aerospiker._
@@ -16,6 +17,7 @@ import org.embulk.spi.time.Timestamp
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.{ Map => MMap, ListBuffer }
 import scala.collection.JavaConversions._
+import scalaz.{ \/-, -\/ }
 import scalaz.concurrent.Task
 import scalaz.stream._
 
@@ -134,53 +136,63 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
   }
 
   val updater: Sink[Task, Seq[Map[String, Any]]] = sink.lift[Task, Seq[Map[String, Any]]] { records =>
-    val t = Task.gatherUnordered {
-      records map { record =>
-        val keyObj = record.getOrElse(tsk.getKeyName.get, "")
-        val deRec = record - tsk.getKeyName.get
-        if (tsk.getSingleBinName.isPresent)
-          aerospike.put(keyObj.toString, Map(tsk.getSingleBinName.get() -> deRec))
-        else
-          aerospike.put(keyObj.toString, deRec)
-      }
-    } run
+    val latch = new CountDownLatch(records.size)
+    val queue = new ConcurrentLinkedQueue[Throwable Xor String]()
+    records foreach { record =>
+      val keyObj = record.getOrElse(tsk.getKeyName.get, "")
+      val deRec = record - tsk.getKeyName.get
+      if (tsk.getSingleBinName.isPresent)
+        aerospike.put(keyObj.toString, Map(tsk.getSingleBinName.get() -> deRec)) runAsync {
+          case -\/(e) => queue.add(Xor.left(e)); latch.countDown()
+          case \/-(r) => queue.add(r); latch.countDown()
+        }
+      else
+        aerospike.put(keyObj.toString, deRec) runAsync {
+          case -\/(e) => queue.add(Xor.left(e)); latch.countDown()
+          case \/-(r) => queue.add(r); latch.countDown()
+        }
+    }
+
+    latch.await()
 
     Task.delay {
-      for ( r <- t ) {
-        r match {
-          case Left(e @ PutError(key, cause)) =>
-            log.error(e.toString, e)
-            failures += key -> cause.getMessage
-            failCount.addAndGet(1L)
-          case Left(e) =>
-            log.error(e.toString, e)
-            failures += e.getMessage -> e.getMessage
-            failCount.addAndGet(1L)
-          case Right(_) =>
-            successCount.addAndGet(1L)
-        }
+      queue foreach {
+        case Left(e @ PutError(key, cause)) =>
+          log.error(e.toString, e)
+          failures += key -> cause.getMessage
+          failCount.addAndGet(1L)
+        case Left(e) =>
+          log.error(e.toString, e)
+          failures += e.getMessage -> e.getMessage
+          failCount.addAndGet(1L)
+        case Right(_) =>
+          successCount.addAndGet(1L)
       }
     }
   }
 
   val deleter: Sink[Task, Seq[Map[String, Any]]] = sink.lift[Task, Seq[Map[String, Any]]] { records =>
-    val t = Task.gatherUnordered {
-      records map { record =>
-        val keyObj = record.getOrElse(tsk.getKeyName.get, "")
-        aerospike.delete(keyObj.toString)
+    val latch = new CountDownLatch(records.size)
+    val queue = new ConcurrentLinkedQueue[DeleteError Xor Boolean]()
+    records foreach { record =>
+      val keyObj = record.getOrElse(tsk.getKeyName.get, "")
+      val key = keyObj.toString
+      aerospike.delete(key) runAsync {
+        case -\/(e) => queue.add(Xor.left(DeleteError(key, e))); latch.countDown()
+        case \/-(r) => queue.add(r); latch.countDown()
       }
-    } run
+    }
+
+    latch.await()
 
     Task.delay {
-      for ( r <- t ) {
-        r match {
-          case Left(DeleteError(key, cause)) =>
-            log.error(key, cause)
-            failures += key -> cause.getMessage
-            failCount.addAndGet(1L)
-          case Right(_) =>
-            successCount.addAndGet(1L)
-        }
+      queue foreach {
+        case Left(DeleteError(key, cause)) =>
+          log.error(key, cause)
+          failures += key -> cause.getMessage
+          failCount.addAndGet(1L)
+        case Right(_) =>
+          successCount.addAndGet(1L)
       }
     }
   }
