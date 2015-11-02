@@ -81,7 +81,8 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
     case v: String => v.asJson
     case v: Seq[Any] => Json.array(v.map(x => toJson(x)): _*)
     case v: Map[String, Any] => Json.fromFields(v.map { case (k, va) => (k, toJson(va)) } toSeq)
-    case _ => ???
+    case null => Json.empty
+    case _ => log.error(s"Unsupported class[${a.getClass}]"); throw new RuntimeException(s"Unsupported class[${a.getClass}]")
   }
 
   implicit val encoder = Encoder.instance[Any](toJson)
@@ -115,13 +116,13 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
               val sep = sp.getSeparator
               sp.getElementType match {
                 case "long" =>
-                  val x = v.split(sep).map(s => if (s.isEmpty) "0" else s).map(_.toLong)
+                  val x = v.split(sep).toSeq.map(s => if (s.isEmpty) "0" else s).map(_.toLong)
                   rec += n -> x
                 case "double" =>
-                  val x = v.split(sep).map(s => if (s.isEmpty) "0" else s).map(_.toDouble)
+                  val x = v.split(sep).toSeq.map(s => if (s.isEmpty) "0" else s).map(_.toDouble)
                   rec += n -> x
                 case "string" =>
-                  val x = v.split(sep)
+                  val x = v.split(sep).toSeq
                   rec += n -> x
               }
           }
