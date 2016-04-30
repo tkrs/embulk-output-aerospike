@@ -4,8 +4,6 @@
 
 Aerospike output plugins for Embulk loads records to databases using [aerospiker](https://github.com/tkrs/aerospiker).
 
-And it was implemented in Scala :laughing:
-
 ## Overview
 
 * **Plugin type**: output
