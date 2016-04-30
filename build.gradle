@@ -16,11 +16,11 @@ configurations {
     provided
 }
 
-version = "0.3.3"
+version = "0.3.4"
 
 dependencies {
-    compile  "org.embulk:embulk-core:0.7.5"
-    provided "org.embulk:embulk-core:0.7.5"
+    compile  "org.embulk:embulk-core:0.8.8"
+    provided "org.embulk:embulk-core:0.8.8"
     compile 'org.scala-lang:scala-library:2.11.7'
     compile 'org.scalaz.stream:scalaz-stream_2.11:0.8'
     compile 'com.github.tkrs:aerospiker-core_2.11:0.4.0'
