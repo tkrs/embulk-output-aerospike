@@ -1,6 +1,6 @@
 plugins {
-    id "com.jfrog.bintray" version "1.1"
-    id "com.github.jruby-gradle.base" version "0.1.5"
+    id "com.jfrog.bintray" version "1.7.3"
+    id "com.github.jruby-gradle.base" version "1.1.3"
     id 'scala'
 }
 import com.github.jrubygradle.JRubyExec
@@ -8,24 +8,18 @@ import com.github.jrubygradle.JRubyExec
 repositories {
     mavenCentral()
     jcenter()
-    maven {
-        url "https://oss.sonatype.org/content/repositories/snapshots/"
-    }
 }
 configurations {
     provided
 }
 
-version = "0.3.4"
+version = "0.4.0"
 
 dependencies {
-    compile  "org.embulk:embulk-core:0.8.8"
-    provided "org.embulk:embulk-core:0.8.8"
-    compile 'org.scala-lang:scala-library:2.11.7'
-    compile 'org.scalaz.stream:scalaz-stream_2.11:0.8'
-    compile 'com.github.tkrs:aerospiker-core_2.11:0.4.0'
-    compile 'com.github.tkrs:aerospiker-msgpack_2.11:0.4.0'
-    compile 'com.github.tkrs:aerospiker-task_2.11:0.4.0'
+    compile  "org.embulk:embulk-core:0.8.11"
+    provided "org.embulk:embulk-core:0.8.11"
+    compile 'org.scala-lang:scala-library:2.12.1'
+    compile 'com.aerospike:aerospike-client:3.3.3'
     testCompile "junit:junit:4.+"
 }
 

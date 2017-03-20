@@ -21,18 +21,18 @@ Aerospike output plugins for Embulk loads records to databases using [aerospiker
 - **set_name**: destination set name (string, required)
 - **key_name**: corresponding column name for create destination key. specified column will be excluded from destinations. (hash, default: `key`)
 - **client_policy**: (hash, default: `conform to aerospike`)
-  - **user**: user name (string, default: `null`)
-  - **password**: user password (string, default: `null`)
-  - **timeout**: command timeout (int, default: `conform to aerospike`)
-  - **max_threads**: max thread numbers (int, default: `conform to aerospike`)
+  - **user**: User authentication to cluster (string, default: `null`)
+  - **password**: Password authentication to cluster (string, default: `null`)
+  - **timeout**: Initial host connection timeout in milliseconds (int, default: `conform to aerospike`)
+  - **max_conns_per_node**: Maximum number of connections allowed per server node (int, default: `conform to aerospike`)
   - **max_socket_idle**: max socket idel numbers (int, default: `conform to aerospike`)
-  - **tend_interval**: tend interval numbers (int, default: `conform to aerospike`)
-  - **fail_if_not_connected**: fail if not connected (boolean, default: `conform to aerospike`)
+  - **tend_interval**: Interval in milliseconds between cluster tends by maintenance thread (int, default: `conform to aerospike`)
+  - **fail_if_not_connected**: Throw exception if all seed connections fail on cluster instantiation (boolean, default: `conform to aerospike`)
 - **write_policy**: (hash, default: `conform to aerospike`)
-  - **generation**: generation (string, default: `conform to aerospike`)
-  - **expiration**: expiration time (int, default: `conform to aerospike`)
-  - **max_retries**: max retry numbers (int, default: `conform to aerospike`)
-  - **send_key**: send real key (int, default: `conform to aerospike`)
+  - **generation**: Expected generation (string, default: `conform to aerospike`)
+  - **expiration**: Record expiration (int, default: `conform to aerospike`)
+  - **max_retries**: Maximum number of retries before aborting the current transaction (int, default: `conform to aerospike`)
+  - **send_key**: Send user defined key in addition to hash digest on both reads and writes (int, default: `conform to aerospike`)
   - **sleep_between_retries**: sleepp between retry numbers (int, default: `conform to aerospike`)
 - **single_bin_name**: bin name (string, default: `null`)
 - **splitters**: key is column_name (hash, required)
@@ -41,7 +41,7 @@ Aerospike output plugins for Embulk loads records to databases using [aerospiker
 
 ## Example
 
-### single bin mode
+### Single bin mode
 
 ```yaml
 out:
@@ -58,7 +58,7 @@ out:
 
 ```
 
-### multi bin mode
+### Multiple bin mode
 
 ```yaml
 out:

@@ -59,8 +59,12 @@ object AerospikeOutputPlugin {
     @Config("timeout")
     @ConfigDefault("0") def getTimeout: Optional[Integer]
 
+    @Deprecated
     @Config("max_threads")
     @ConfigDefault("300") def getMaxThreads: Optional[Integer]
+
+    @Config("max_conns_per_node")
+    @ConfigDefault("300") def getMaxConnsPerNode: Optional[Integer]
 
     @Config("max_socket_idle")
     @ConfigDefault("14") def getMaxSocketIdle: Optional[Integer]
