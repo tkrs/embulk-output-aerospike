@@ -19,7 +19,7 @@ object AerospikeOutputPlugin {
     @Config("set_name") def getSetName: String
 
     @Config("key_name")
-    @ConfigDefault("key") def getKeyName: Optional[String]
+    @ConfigDefault("\"key\"") def getKeyName: Optional[String]
 
     @Config("client_policy")
     @ConfigDefault("null") def getClientPolicy: Optional[AerospikeOutputPlugin.ClientPolicyTask]

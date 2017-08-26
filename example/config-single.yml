@@ -20,7 +20,8 @@ out:
   - {name: 'localhost', port: 3000}
   command: put
   namespace: test
-  set_name: user
+  set_name: user_single
   key_name: user_id
+  single_bin_name: record
   splitters:
-    user_name: {separator: ',', element_type: string}
+    user_name: {separator: '\t', element_type: string}
