@@ -1,0 +1,27 @@
+in:
+  type: file
+  path_prefix: './example/sample.csv'
+  parser:
+    charset: UTF-8
+    newline: CRLF
+    type: csv
+    delimiter: ','
+    quote: '"'
+    escape: '"'
+    null_string: 'NULL'
+    skip_header_lines: 1
+    columns:
+      - {name: user_id, type: long}
+      - {name: user_name, type: string}
+out:
+  type: aerospike
+  hosts:
+  - {name: 'localhost', port: 3000}
+  command: put
+  namespace: test
+  set_name: set
+  key_name: user_id
+  single_bin_name: record
+  splitters:
+    column1: {separator: '\.*', element_type: string}
+    column2: {separator: '\t', element_type: long}

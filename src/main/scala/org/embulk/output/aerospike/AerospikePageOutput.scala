@@ -92,8 +92,11 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
   val createRecords: Page => Process[Task, Seq[Seq[Col]]] = { page =>
     reader.setPage(page)
     val records: ListBuffer[Seq[Col]] = ListBuffer.empty
-    while (reader.nextRecord())
-      records += (for (col <- schema.getColumns.toStream) yield Col of col)
+    while (reader.nextRecord()) {
+      val columns = schema.getColumns.toList
+      val convs = columns.map(Col.of)
+      records += convs
+    }
     Process.eval(Task.now(records))
   }
 
@@ -138,16 +141,17 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
     records foreach { record =>
       val keyObj = record.getOrElse(tsk.getKeyName.get, "")
       val deRec = record - tsk.getKeyName.get
-      if (tsk.getSingleBinName.isPresent)
+      if (tsk.getSingleBinName.isPresent) {
         aerospike.put(keyObj.toString, Map(tsk.getSingleBinName.get() -> deRec)) runAsync {
           case -\/(e) => queue.add(Xor.left(e)); latch.countDown()
           case \/-(r) => queue.add(r); latch.countDown()
         }
-      else
+      } else {
         aerospike.put(keyObj.toString, deRec) runAsync {
           case -\/(e) => queue.add(Xor.left(e)); latch.countDown()
           case \/-(r) => queue.add(r); latch.countDown()
         }
+      }
     }
 
     latch.await()
@@ -194,7 +198,7 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
     }
   }
 
-  def add(page: Page) {
+  def add(page: Page): Unit = {
     tsk.getCommand match {
       case "put" =>
         createRecords(page).takeWhile(_.nonEmpty).map(toRecords).to(updater).run.run
