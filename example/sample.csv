@@ -1,8 +1,8 @@
-user_id,user_name
-1,"Ritsuka Fujimura"
-2,"Mash Kyrielight"
-3,"Fou"
-4,"Olgamally Animusphere"
-5,"Bomani Archaman"
-6,"Lev Lainur"
+user_id,user_name,age
+1,"Ritsuka,Fujimura",30
+2,"Mash,Kyrielight",20
+3,"Fou",999
+4,"Olgamally,Animusphere",10
+5,"Bomani,Archaman",20
+6,"Lev,Lainur",45
 
