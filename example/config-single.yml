@@ -25,3 +25,5 @@ out:
   single_bin_name: record
   splitters:
     user_name: {separator: '\t', element_type: string}
+  write_policy:
+    expiration: 64000

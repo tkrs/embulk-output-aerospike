@@ -84,3 +84,49 @@ out:
 ```sh
 ./gradlew gem  # -t to watch change of files and rebuild continuously
 ```
+
+## Run example
+
+First, start the aerospike-server
+
+```sh
+docker run --rm -ti --name aerospike -p 3000:3000 -p 3001:3001 -p 3002:3002 -p 3003:3003 aerospike/aerospike-server
+```
+
+Then, run embulk with [example config](https://github.com/tkrs/embulk-output-aerospike/blob/master/example/config.yml).
+
+
+```sh
+λ embulk -J-O -R--dev run -I lib example/config.yml
+2017-11-30 23:49:24.598 +0900: Embulk v0.8.30
+2017-11-30 23:49:38.484 +0900 [INFO] (0001:transaction): Loaded plugin embulk/output/aerospike from a load path
+2017-11-30 23:49:38.503 +0900 [INFO] (0001:transaction): Listing local files at directory 'example' filtering filename by prefix 'sample.csv'
+2017-11-30 23:49:38.505 +0900 [INFO] (0001:transaction): "follow_symlinks" is set false. Note that symbolic links to directories are skipped.
+2017-11-30 23:49:38.508 +0900 [INFO] (0001:transaction): Loading files [example/sample.csv]
+2017-11-30 23:49:38.544 +0900 [INFO] (0001:transaction): Using local thread executor with max_threads=8 / output tasks 4 = input tasks 1 * 4
+2017-11-30 23:49:38.567 +0900 [INFO] (0001:transaction): {done:  0 / 1, running: 0}
+2017-11-30 23:49:39.134 +0900 [INFO] (0013:task-0000): finish put ok[6] ng[0]
+2017-11-30 23:49:39.135 +0900 [INFO] (0013:task-0000): finish put ok[0] ng[0]
+2017-11-30 23:49:39.135 +0900 [INFO] (0013:task-0000): finish put ok[0] ng[0]
+2017-11-30 23:49:39.135 +0900 [INFO] (0013:task-0000): finish put ok[0] ng[0]
+2017-11-30 23:49:39.278 +0900 [INFO] (0001:transaction): {done:  1 / 1, running: 0}
+2017-11-30 23:49:39.284 +0900 [INFO] (main): Committed.
+2017-11-30 23:49:39.284 +0900 [INFO] (main): Next config diff: {"in":{"last_path":"example/sample.csv"},"out":{"rans":6,"failures":"{}"}}
+```
+
+Let's check it.
+
+```sh
+docker exec -it aerospike aql -c "select * from test"
++---------------------------------------+-----+
+| user_name                             | age |
++---------------------------------------+-----+
+| LIST('["Bomani", "Archaman"]')        | 20  |
+| LIST('["Ritsuka", "Fujimura"]')       | 30  |
+| LIST('["Fou"]')                       | 999 |
+| LIST('["Mash", "Kyrielight"]')        | 20  |
+| LIST('["Olgamally", "Animusphere"]')  | 10  |
+| LIST('["Lev", "Lainur"]')             | 45  |
++---------------------------------------+-----+
+6 rows in set (0.167 secs)
+```
