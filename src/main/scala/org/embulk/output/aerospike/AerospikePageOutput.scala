@@ -1,13 +1,9 @@
 package org.embulk.output.aerospike
 
-import java.util.concurrent.{ CountDownLatch, ConcurrentLinkedQueue }
 import java.util.concurrent.atomic.AtomicLong
 
-import aerospiker._
-import aerospiker.policy.{ ClientPolicy, WritePolicy }
-import aerospiker.task.{ DeleteError, PutError, Aerospike }
-import cats.data.Xor, Xor._
-import io.circe._, io.circe.syntax._
+import com.aerospike.client.{AerospikeClient, Bin, Host, Key}
+import com.aerospike.client.policy.{ClientPolicy, WritePolicy}
 import org.embulk.config.TaskReport
 import org.embulk.config.TaskSource
 import org.embulk.spi._
@@ -15,11 +11,8 @@ import org.embulk.spi.`type`.Type
 import org.embulk.spi.time.Timestamp
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable.{ Map => MMap, ListBuffer }
 import scala.collection.JavaConversions._
-import scalaz.{ \/-, -\/ }
-import scalaz.concurrent.Task
-import scalaz.stream._
+import scala.util.{Failure, Success, Try}
 
 class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int) extends TransactionalPageOutput {
 
@@ -34,176 +27,131 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
   private[this] val failures = TrieMap.empty[String, String]
 
   private[this] val wp: WritePolicy = {
+    val wp = new WritePolicy()
     if (tsk.getWritePolicy.isPresent) {
       val wpTask: WritePolicyTask = tsk.getWritePolicy.get
-      WritePolicy(
-        sendKey = wpTask.getSendKey.get,
-        expiration = wpTask.getExpiration.get,
-        maxRetries = wpTask.getMaxRetries.get,
-        generation = wpTask.getGeneration.get,
-        sleepBetweenRetries = wpTask.getSleepBetweenRetries.get
-      )
-    } else {
-      WritePolicy()
+      wp.sendKey = wpTask.getSendKey.get
+      wp.expiration = wpTask.getExpiration.get
+      wp.maxRetries = wpTask.getMaxRetries.get
+      wp.generation = wpTask.getGeneration.get
+      wp.sleepBetweenRetries = wpTask.getSleepBetweenRetries.get
     }
+    wp
   }
 
   implicit val policy: ClientPolicy = {
+    val cp = new ClientPolicy()
     if (tsk.getClientPolicy.isPresent) {
       val cpTask: ClientPolicyTask = tsk.getClientPolicy.get
-      ClientPolicy(
-        failIfNotConnected = cpTask.getFailIfNotConnected.get,
-        maxThreads = cpTask.getMaxThreads.get,
-        maxSocketIdle = cpTask.getMaxSocketIdle.get,
-        password = cpTask.getPassword.orNull,
-        user = cpTask.getUser.orNull,
-        timeout = cpTask.getTimeout.get,
-        tendInterval = cpTask.getTendInterval.get,
-        writePolicyDefault = wp
-      )
-    } else {
-      ClientPolicy(writePolicyDefault = wp)
+      cp.failIfNotConnected = cpTask.getFailIfNotConnected.get
+      cp.maxConnsPerNode =cpTask.getMaxConnsPerNode.get()
+      cp.maxSocketIdle = cpTask.getMaxSocketIdle.get
+      cp.password = cpTask.getPassword.orNull
+      cp.user = cpTask.getUser.orNull
+      cp.timeout = cpTask.getTimeout.get
+      cp.tendInterval = cpTask.getTendInterval.get
     }
+    cp.writePolicyDefault = wp
+    cp
   }
+
+  val namespace: String = tsk.getNamespace
+  val setName: String = tsk.getSetName
 
   private[this] val hosts: Seq[Host] = tsk.getHosts.map(host => new Host(host.getName, host.getPort))
-  private[this] val executor = AsyncCommandExecutor(AsyncClient(hosts: _*))
-  private[this] val aerospike = new Aerospike(executor) {
-    override protected def namespace: String = tsk.getNamespace
-    override protected def setName: String = tsk.getSetName
-  }
 
-  private[this] def toJson(a: Any): Json = a match {
-    case v: Boolean => v.asJson
-    case v: Int => v.asJson
-    case v: Long => v.asJson
-    case v: Double => v.asJson
-    case v: String => v.asJson
-    case v: Seq[Any] => Json.array(v.map(x => toJson(x)): _*)
-    case v: Map[String, Any] => Json.fromFields(v.map { case (k, va) => (k, toJson(va)) } toSeq)
-    case null => Json.empty
-    case _ => log.error(s"Unsupported class[${a.getClass}]"); throw new RuntimeException(s"Unsupported class[${a.getClass}]")
-  }
-
-  implicit val encoder = Encoder.instance[Any](toJson)
+  private[this] val aerospike = new AerospikeClient(policy, hosts: _*)
 
   implicit private[this] val reader: PageReader = new PageReader(schema)
 
-  val createRecords: Page => Process[Task, Seq[Seq[Col]]] = { page =>
+  def createRecords(page: Page): Iterator[Seq[Col]] =  {
     reader.setPage(page)
-    val records: ListBuffer[Seq[Col]] = ListBuffer.empty
-    while (reader.nextRecord()) {
-      val columns = schema.getColumns.toList
-      val convs = columns.map(Col.of)
-      records += convs
-    }
-    Process.eval(Task.now(records))
+    Iterator.continually(())
+      .takeWhile(_ => reader.nextRecord())
+      .map(_ => schema.getColumns.toList)
+      .map(_.map(Col.of))
   }
 
-  val toRecords: Seq[Seq[Col]] => Seq[Map[String, Any]] = _ map { row =>
-    val rec: MMap[String, Any] = MMap.empty
+  val toRecords: Seq[Col] => java.util.Map[String, Object] = { row =>
+    val rec: java.util.Map[String, Object] = new java.util.HashMap()
     row foreach {
-      case DoubleColumn(i, n, v) => rec += n -> v
-      case LongColumn(i, n, v) => rec += n -> v
+      case DoubleColumn(i, n, v) => rec += n -> (v: java.lang.Double)
+      case LongColumn(i, n, v) => rec += n -> (v: java.lang.Long)
       case StringColumn(i, n, v) =>
         if (tsk.getSplitters.isPresent) {
           val sps = tsk.getSplitters.get.toMap
           sps.get(n) match {
-            case None => //
-              rec += n -> v
+            case None =>
+              rec += n -> (v: java.lang.String)
             case Some(sp) =>
               val sep = sp.getSeparator
               sp.getElementType match {
                 case "long" =>
-                  val x = v.split(sep).toSeq.map(s => if (s.isEmpty) "0" else s).map(_.toLong)
-                  rec += n -> x
+                  val xs = new java.util.ArrayList[Long]
+                  v.split(sep).map(s => if (s.isEmpty) "0" else s).foreach(x => xs.add(x.toLong: java.lang.Long))
+                  rec += n -> xs
                 case "double" =>
-                  val x = v.split(sep).toSeq.map(s => if (s.isEmpty) "0" else s).map(_.toDouble)
-                  rec += n -> x
+                  val xs = new java.util.ArrayList[Double]
+                  v.split(sep).map(s => if (s.isEmpty) "0" else s).foreach(x => xs.add(x.toDouble: java.lang.Double))
+                  rec += n -> xs
                 case "string" =>
-                  val x = v.split(sep).toSeq
-                  rec += n -> x
+                  val xs = new java.util.ArrayList[String]
+                  val x = v.split(sep).foreach(xs.add)
+                  rec += n -> xs
               }
           }
         } else {
           rec += n -> v
         }
-      case BooleanColumn(i, n, v) => rec += n -> v
-      case TimestampColumn(i, n, v) => rec += n -> v
+      case BooleanColumn(i, n, v) => rec += n -> (v: java.lang.Boolean)
+      case TimestampColumn(i, n, v) => rec += n -> (v.toEpochMilli: java.lang.Long)
       case NullColumn(i, n, t) => // nop
     }
-    rec.toMap
+    rec
   }
 
-  val updater: Sink[Task, Seq[Map[String, Any]]] = sink.lift[Task, Seq[Map[String, Any]]] { records =>
-    val latch = new CountDownLatch(records.size)
-    val queue = new ConcurrentLinkedQueue[Throwable Xor String]()
-    records foreach { record =>
-      val keyObj = record.getOrElse(tsk.getKeyName.get, "")
-      val deRec = record - tsk.getKeyName.get
+  def updater(record: java.util.Map[String, Object]): Unit = {
+    val keyObj = record.getOrElse(tsk.getKeyName.get, "")
+    val key = new Key(namespace, setName, keyObj.toString)
+    record.remove(tsk.getKeyName.get)
+    Try {
       if (tsk.getSingleBinName.isPresent) {
-        aerospike.put(keyObj.toString, Map(tsk.getSingleBinName.get() -> deRec)) runAsync {
-          case -\/(e) => queue.add(Xor.left(e)); latch.countDown()
-          case \/-(r) => queue.add(r); latch.countDown()
-        }
+        val bin = new Bin(tsk.getSingleBinName.get(), record)
+        aerospike.put(wp, key, bin)
       } else {
-        aerospike.put(keyObj.toString, deRec) runAsync {
-          case -\/(e) => queue.add(Xor.left(e)); latch.countDown()
-          case \/-(r) => queue.add(r); latch.countDown()
-        }
+        val bins = record.map { case (k, v) => new Bin(k, v) }
+        aerospike.put(wp, key, bins.toSeq: _*)
       }
-    }
-
-    latch.await()
-
-    Task.delay {
-      queue foreach {
-        case Left(e @ PutError(key, cause)) =>
-          log.error(e.toString, e)
-          failures += key -> cause.getMessage
-          failCount.addAndGet(1L)
-        case Left(e) =>
-          log.error(e.toString, e)
-          failures += e.getMessage -> e.getMessage
-          failCount.addAndGet(1L)
-        case Right(_) =>
-          successCount.addAndGet(1L)
-      }
+    } match {
+      case Failure(e) =>
+        log.error(e.toString, e)
+        failures += keyObj.toString -> e.getMessage
+        failCount.addAndGet(1L)
+      case Success(r) => ()
+        successCount.addAndGet(1L)
     }
   }
 
-  val deleter: Sink[Task, Seq[Map[String, Any]]] = sink.lift[Task, Seq[Map[String, Any]]] { records =>
-    val latch = new CountDownLatch(records.size)
-    val queue = new ConcurrentLinkedQueue[DeleteError Xor Boolean]()
-    records foreach { record =>
-      val keyObj = record.getOrElse(tsk.getKeyName.get, "")
-      val key = keyObj.toString
-      aerospike.delete(key) runAsync {
-        case -\/(e) => queue.add(Xor.left(DeleteError(key, e))); latch.countDown()
-        case \/-(r) => queue.add(r); latch.countDown()
-      }
-    }
-
-    latch.await()
-
-    Task.delay {
-      queue foreach {
-        case Left(DeleteError(key, cause)) =>
-          log.error(key, cause)
-          failures += key -> cause.getMessage
-          failCount.addAndGet(1L)
-        case Right(_) =>
-          successCount.addAndGet(1L)
-      }
+  val deleter: java.util.Map[String, Object] => Unit = { record =>
+    val keyObj = record.getOrElse(tsk.getKeyName.get, "")
+    val k = keyObj.toString
+    val key = new Key(namespace, setName, k)
+    Try(aerospike.delete(wp, key)) match {
+      case Failure(e) =>
+        log.error(k, e)
+        failures += k -> e.getMessage
+        failCount.addAndGet(1L)
+      case Success(_) =>
+        successCount.addAndGet(1L)
     }
   }
 
   def add(page: Page): Unit = {
     tsk.getCommand match {
       case "put" =>
-        createRecords(page).takeWhile(_.nonEmpty).map(toRecords).to(updater).run.run
+        createRecords(page).map(toRecords).foreach(updater)
       case "delete" =>
-        createRecords(page).takeWhile(_.nonEmpty).map(toRecords).to(deleter).run.run
+        createRecords(page).map(toRecords).foreach(deleter)
     }
   }
 
@@ -211,7 +159,7 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
 
   def close(): Unit = {
     reader.close()
-    executor.close
+    aerospike.close()
   }
 
   def abort(): Unit = log.error(s"abort ${tsk.getCommand} ok[${successCount.longValue}] ng[${failCount.longValue()}]")
@@ -219,7 +167,7 @@ class AerospikePageOutput(taskSource: TaskSource, schema: Schema, taskIndex: Int
   def commit: TaskReport = {
     var r = Exec.newTaskReport
     r.set("rans", successCount.longValue() + failCount.longValue())
-    r.set("failures", failures.toMap.asJson.pretty(Printer.noSpaces))
+    r.set("failures", failures)
     r
   }
 }
@@ -229,7 +177,7 @@ object ops {
   sealed trait Col
 
   object Col {
-    def of(c: Column)(implicit r: PageReader) =
+    def of(c: Column)(implicit r: PageReader): Col =
       if (r isNull c) NullColumn(c.getIndex, c.getName, c.getType)
       else c.getType.getName match {
         case "string" =>

@@ -25,6 +25,7 @@ Aerospike output plugins for Embulk loads records to databases using [aerospiker
   - **password**: user password (string, default: `null`)
   - **timeout**: command timeout (int, default: `conform to aerospike`)
   - **max_threads**: max thread numbers (int, default: `conform to aerospike`)
+  - **max_conns_per_node**: max connections allowed per server node (int, default: `conform to aerospike`)
   - **max_socket_idle**: max socket idel numbers (int, default: `conform to aerospike`)
   - **tend_interval**: tend interval numbers (int, default: `conform to aerospike`)
   - **fail_if_not_connected**: fail if not connected (boolean, default: `conform to aerospike`)
