@@ -25,7 +25,7 @@ targetCompatibility = 1.7
 dependencies {
     compile  "org.embulk:embulk-core:0.8.38"
     provided "org.embulk:embulk-core:0.8.38"
-    compile 'org.scala-lang:scala-library:2.11.7'
+    compile 'org.scala-lang:scala-library:2.11.11'
     compile 'org.scalaz.stream:scalaz-stream_2.11:0.8'
     compile 'com.github.tkrs:aerospiker-core_2.11:0.4.0'
     compile 'com.github.tkrs:aerospiker-msgpack_2.11:0.4.0'
